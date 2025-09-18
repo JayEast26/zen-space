@@ -1,0 +1,46 @@
+import { useState } from "react";
+import { View, Text, TextInput, Pressable, Alert, StyleSheet } from "react-native";
+import { createUserWithEmailAndPassword } from "firebase/auth";
+import { auth } from "../../firebaseConfig";
+import { useRouter } from "expo-router";
+
+export default function SignUp() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const router = useRouter();
+
+  const handleSignup = async () => {
+    try {
+      await createUserWithEmailAndPassword(auth, email, password);
+      Alert.alert("Account created", "You can now sign in.");
+      router.push("/auth/signin"); // go to sign in after signup
+    } catch (e) {
+      Alert.alert("Signup failed", e.message);
+    }
+  };
+
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>Create Your Account 🌸</Text>
+      <TextInput style={styles.input} placeholder="Email" value={email} onChangeText={setEmail} />
+      <TextInput style={styles.input} placeholder="Password" secureTextEntry value={password} onChangeText={setPassword} />
+
+      <Pressable style={styles.button} onPress={handleSignup}>
+        <Text style={styles.buttonText}>Sign Up</Text>
+      </Pressable>
+
+      <Pressable onPress={() => router.push("/auth/signin")}>
+        <Text style={styles.linkText}>Already have an account? Sign In</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#f5f7fa", padding: 20 },
+  title: { fontSize: 28, marginBottom: 30, fontWeight: "bold", color: "#2e3b4e" },
+  input: { width: "100%", padding: 14, borderRadius: 10, backgroundColor: "#fff", marginBottom: 12, borderWidth: 1, borderColor: "#ddd" },
+  button: { width: "100%", padding: 16, backgroundColor: "#64b5f6", borderRadius: 12, alignItems: "center" },
+  buttonText: { color: "white", fontWeight: "bold" },
+  linkText: { marginTop: 20, color: "#2e3b4e" },
+});

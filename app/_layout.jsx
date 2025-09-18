@@ -1,14 +1,11 @@
-import { Stack } from "expo-router"
-import { StatusBar } from "expo-status-bar"
+// app/_layout.jsx
+import { Stack } from "expo-router";
+import { SpaceProvider } from "../contexts/SpaceContext";
 
-export default function RootLayout() {
+export default function Layout() {
   return (
-    <>
-      <StatusBar style="auto" />
-      <Stack>
-        <Stack.Screen name="goals" options={{ headerShown: false }} />
-        <Stack.Screen name="+not-found" />
-      </Stack>
-    </>
-  )
+    <SpaceProvider>
+      <Stack screenOptions={{ headerShown: false }} />
+    </SpaceProvider>
+  );
 }
