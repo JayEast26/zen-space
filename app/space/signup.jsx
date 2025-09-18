@@ -1,25 +1,35 @@
 // /app/goals/signup.jsx
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, Pressable, Alert } from 'react-native';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '../../firebaseConfig'; // This is the correct path for this file
-import { Link, useRouter } from 'expo-router';
+import React, { useState } from "react";
+import { View, Text, StyleSheet, TextInput, Pressable, Alert } from "react-native";
+import { createUserWithEmailAndPassword } from "firebase/auth";
+import { doc, setDoc } from "firebase/firestore";
+import { auth, db } from "../../firebaseConfig"; // make sure db is exported in firebaseConfig
+import { Link, useRouter } from "expo-router";
 
 const SignupScreen = () => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const router = useRouter();
 
   const handleSignup = async () => {
-    if (email === '' || password === '') {
+    if (email === "" || password === "") {
       Alert.alert("Error", "Please fill in all fields.");
       return;
     }
 
     try {
-      await createUserWithEmailAndPassword(auth, email, password);
-      Alert.alert("Success", "Account created successfully! You can now sign in.");
-      router.replace('/goals/signin');
+      // Create user in Firebase Auth
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+
+      // Save user data to Firestore
+      await setDoc(doc(db, "users", user.uid), {
+        email: user.email,
+        createdAt: new Date().toISOString(),
+      });
+
+      Alert.alert("Success", "Account created successfully!");
+      router.replace("/space/signin");
     } catch (error) {
       Alert.alert("Signup Failed", error.message);
     }
@@ -28,7 +38,7 @@ const SignupScreen = () => {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>CREATE ACCOUNT</Text>
-      
+
       <TextInput
         style={styles.input}
         placeholder="EMAIL"
@@ -37,7 +47,7 @@ const SignupScreen = () => {
         onChangeText={setEmail}
         autoCapitalize="none"
       />
-      
+
       <TextInput
         style={styles.input}
         placeholder="PASSWORD"
@@ -46,14 +56,14 @@ const SignupScreen = () => {
         onChangeText={setPassword}
         secureTextEntry
       />
-      
+
       <Pressable style={styles.button} onPress={handleSignup}>
         <Text style={styles.buttonText}>SIGN UP</Text>
       </Pressable>
-      
+
       <View style={styles.linkContainer}>
         <Text style={styles.linkText}>Already have an account?</Text>
-        <Link style={styles.link} href="/goals/signin">
+        <Link style={styles.link} href="/space/signin">
           SIGN IN
         </Link>
       </View>
@@ -64,61 +74,61 @@ const SignupScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#f5f5f5',
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#f5f5f5",
     paddingHorizontal: 30,
   },
   title: {
     marginBottom: 50,
     fontSize: 28,
-    color: '#4a4a4a',
+    color: "#4a4a4a",
     letterSpacing: 4,
-    fontWeight: '300',
+    fontWeight: "300",
   },
   input: {
-    width: '100%',
+    width: "100%",
     padding: 15,
     marginBottom: 20,
-    backgroundColor: '#e8e8e8',
+    backgroundColor: "#e8e8e8",
     borderRadius: 8,
     fontSize: 16,
-    color: '#4a4a4a',
+    color: "#4a4a4a",
     borderWidth: 1,
-    borderColor: '#e0e0e0',
+    borderColor: "#e0e0e0",
   },
   button: {
-    width: '100%',
+    width: "100%",
     padding: 15,
-    backgroundColor: '#6b8e23',
+    backgroundColor: "#6b8e23",
     borderRadius: 8,
-    alignItems: 'center',
+    alignItems: "center",
     marginTop: 10,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
   },
   buttonText: {
-    color: 'white',
+    color: "white",
     fontSize: 16,
-    fontWeight: '600',
-    textTransform: 'uppercase',
+    fontWeight: "600",
+    textTransform: "uppercase",
   },
   linkContainer: {
-    flexDirection: 'row',
+    flexDirection: "row",
     marginTop: 20,
-    alignItems: 'center',
+    alignItems: "center",
   },
   linkText: {
     fontSize: 14,
-    color: '#888',
+    color: "#888",
   },
   link: {
     fontSize: 14,
-    color: '#6b8e23',
-    fontWeight: '600',
+    color: "#6b8e23",
+    fontWeight: "600",
     marginLeft: 5,
   },
 });
