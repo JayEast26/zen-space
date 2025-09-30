@@ -1,33 +1,83 @@
+// app/zen/breathe.jsx
 import { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Animated } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Animated, Easing } from 'react-native';
 
 export default function Breathe() {
   const [isActive, setIsActive] = useState(false);
   const [phase, setPhase] = useState('inhale');
   const [counter, setCounter] = useState(4);
   
+  // Animation values
   const scaleAnim = new Animated.Value(1);
+  const opacityAnim = new Animated.Value(1);
+  const colorAnim = new Animated.Value(0);
+
+  // Enhanced color interpolation
+  const circleColor = colorAnim.interpolate({
+    inputRange: [0, 1, 2],
+    outputRange: ['#667eea', '#f093fb', '#f5576c']
+  });
+
+  const backgroundColor = colorAnim.interpolate({
+    inputRange: [0, 1, 2],
+    outputRange: ['#f8fafc', '#fdfbfb', '#f8fafc']
+  });
 
   useEffect(() => {
     if (!isActive) return;
 
     const animateBreathing = () => {
-      Animated.sequence([
+      let targetScale, targetColor, duration;
+      
+      switch(phase) {
+        case 'inhale':
+          targetScale = 1.6;
+          targetColor = 0;
+          duration = 4000;
+          break;
+        case 'hold':
+          targetScale = 1.6;
+          targetColor = 1;
+          duration = 7000;
+          break;
+        case 'exhale':
+          targetScale = 0.7;
+          targetColor = 2;
+          duration = 8000;
+          break;
+        default:
+          targetScale = 1;
+          targetColor = 0;
+          duration = 1000;
+      }
+
+      Animated.parallel([
         Animated.timing(scaleAnim, {
-          toValue: 1.3,
-          duration: 4000,
+          toValue: targetScale,
+          duration: duration,
+          easing: Easing.bezier(0.4, 0, 0.2, 1),
           useNativeDriver: true,
         }),
-        Animated.timing(scaleAnim, {
-          toValue: 1.3,
-          duration: 7000,
-          useNativeDriver: true,
+        Animated.timing(colorAnim, {
+          toValue: targetColor,
+          duration: duration,
+          easing: Easing.bezier(0.4, 0, 0.2, 1),
+          useNativeDriver: false,
         }),
-        Animated.timing(scaleAnim, {
-          toValue: 1,
-          duration: 8000,
-          useNativeDriver: true,
-        }),
+        Animated.sequence([
+          Animated.timing(opacityAnim, {
+            toValue: 0.6,
+            duration: duration / 2,
+            easing: Easing.ease,
+            useNativeDriver: true,
+          }),
+          Animated.timing(opacityAnim, {
+            toValue: 1,
+            duration: duration / 2,
+            easing: Easing.ease,
+            useNativeDriver: true,
+          })
+        ])
       ]).start();
     };
 
@@ -37,9 +87,8 @@ export default function Breathe() {
       setCounter(prev => {
         if (prev <= 1) {
           setPhase(prevPhase => {
-            if (prevPhase === 'inhale') return 'hold';
-            if (prevPhase === 'hold') return 'exhale';
-            return 'inhale';
+            const nextPhase = prevPhase === 'inhale' ? 'hold' : prevPhase === 'hold' ? 'exhale' : 'inhale';
+            return nextPhase;
           });
           return phase === 'inhale' ? 7 : phase === 'hold' ? 8 : 4;
         }
@@ -48,172 +97,227 @@ export default function Breathe() {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [isActive, phase]);
+  }, [isActive, phase, scaleAnim, opacityAnim, colorAnim]);
 
   const getInstruction = () => {
     switch(phase) {
-      case 'inhale': return 'Breathe In...';
-      case 'hold': return 'Hold...';
-      case 'exhale': return 'Breathe Out...';
-      default: return 'Begin...';
+      case 'inhale': return 'Breathe In Peace...';
+      case 'hold': return 'Hold Stillness...';
+      case 'exhale': return 'Release Tension...';
+      default: return 'Begin Journey...';
     }
   };
 
   const getPhaseColor = () => {
     switch(phase) {
-      case 'inhale': return '#8da676';
-      case 'hold': return '#4a90e2';
-      case 'exhale': return '#e74c3c';
-      default: return '#8da676';
+      case 'inhale': return '#667eea';
+      case 'hold': return '#f093fb';
+      case 'exhale': return '#f5576c';
+      default: return '#667eea';
     }
   };
 
   return (
-    <View style={styles.container}>
+    <Animated.View style={[styles.container, { backgroundColor }]}>
       <View style={styles.header}>
         <Text style={styles.title}>Breathing Exercise</Text>
-        <Text style={styles.technique}>4-7-8 Breathing Technique</Text>
+        <Text style={styles.subtitle}>Find your center</Text>
       </View>
       
       <View style={styles.animationContainer}>
-        <Animated.View 
+        <Animated.Text 
           style={[
-            styles.circle,
+            styles.instruction,
             { 
-              transform: [{ scale: scaleAnim }],
-              backgroundColor: getPhaseColor()
+              color: getPhaseColor(),
+              opacity: opacityAnim,
+              textShadowColor: getPhaseColor() + '40',
+              textShadowOffset: { width: 0, height: 0 },
+              textShadowRadius: 10,
             }
           ]}
         >
-          <Text style={styles.counter}>{counter}</Text>
-          <Text style={styles.phaseText}>{getInstruction()}</Text>
-        </Animated.View>
-      </View>
+          {getInstruction()}
+        </Animated.Text>
+        
+        <Animated.Text 
+          style={[
+            styles.counter,
+            { 
+              transform: [{ scale: opacityAnim }],
+              color: getPhaseColor(),
+              textShadowColor: getPhaseColor() + '30',
+              textShadowOffset: { width: 0, height: 0 },
+              textShadowRadius: 20,
+            }
+          ]}
+        >
+          {counter}
+        </Animated.Text>
+        
+        {/* Enhanced background circles */}
+        <View style={styles.circleContainer}>
+          {[0, 1, 2].map((index) => (
+            <Animated.View 
+              key={index}
+              style={[
+                styles.backgroundCircle,
+                { 
+                  transform: [{ scale: scaleAnim.interpolate({
+                    inputRange: [0.7, 1.6],
+                    outputRange: [0.8 + index * 0.1, 1.0 + index * 0.2]
+                  }) }],
+                  opacity: opacityAnim.interpolate({
+                    inputRange: [0.6, 1],
+                    outputRange: [0.05 + index * 0.05, 0.1 + index * 0.05]
+                  })
+                }
+              ]} 
+            />
+          ))}
+        </View>
 
-      <View style={styles.controls}>
+        {/* Enhanced breathing circle */}
         <TouchableOpacity 
           onPress={() => setIsActive(!isActive)}
-          style={[styles.controlButton, { backgroundColor: getPhaseColor() }]}
+          activeOpacity={0.9}
         >
-          <Text style={styles.controlButtonText}>
-            {isActive ? '⏸️ Pause' : '▶️ Begin'}
-          </Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          onPress={() => {
-            setIsActive(false);
-            setPhase('inhale');
-            setCounter(4);
-            scaleAnim.setValue(1);
-          }}
-          style={styles.secondaryButton}
-        >
-          <Text style={styles.secondaryButtonText}>Reset</Text>
+          <Animated.View 
+            style={[
+              styles.circle,
+              { 
+                transform: [{ scale: scaleAnim }],
+                backgroundColor: circleColor,
+                shadowColor: circleColor,
+              }
+            ]}
+          >
+            <Text style={styles.circleText}>
+              {isActive ? 'Pause' : 'Begin'}
+            </Text>
+            <Animated.View 
+              style={[
+                styles.circleInnerGlow,
+                { opacity: opacityAnim.interpolate({
+                  inputRange: [0.6, 1],
+                  outputRange: [0.3, 0.6]
+                })}
+              ]} 
+            />
+          </Animated.View>
         </TouchableOpacity>
       </View>
-
-      <View style={styles.instructions}>
-        <Text style={styles.instructionsTitle}>How to practice:</Text>
-        <Text style={styles.instruction}>• Inhale through your nose for 4 seconds</Text>
-        <Text style={styles.instruction}>• Hold your breath for 7 seconds</Text>
-        <Text style={styles.instruction}>• Exhale slowly for 8 seconds</Text>
-        <Text style={styles.instruction}>• Repeat 4-5 times</Text>
+      
+      <View style={styles.footer}>
+        <Text style={styles.technique}>4-7-8 Breathing Technique</Text>
+        <Text style={styles.description}>
+          Inhale for 4s • Hold for 7s • Exhale for 8s
+        </Text>
       </View>
-    </View>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { 
-    flex: 1, 
-    backgroundColor: "#f8faf9",
-    paddingHorizontal: 20
+    flex: 1,
+    backgroundColor: '#f8fafc',
   },
   header: {
-    paddingTop: 40,
-    paddingBottom: 20,
-    alignItems: "center",
+    alignItems: 'center',
+    paddingTop: 80,
+    paddingBottom: 30,
   },
-  title: { 
-    fontSize: 28, 
-    fontWeight: "bold", 
-    marginBottom: 8, 
-    color: "#2e3b4e",
+  title: {
+    fontSize: 32,
+    fontWeight: '300',
+    color: '#1a202c',
+    letterSpacing: 1.5,
+    textShadowColor: 'rgba(0, 0, 0, 0.05)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
-  technique: {
+  subtitle: {
     fontSize: 16,
-    color: "#7a869a",
-    textAlign: "center",
+    color: '#718096',
+    marginTop: 8,
+    fontWeight: '300',
+    letterSpacing: 0.5,
   },
   animationContainer: {
     flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
   },
-  circle: {
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    justifyContent: "center",
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-    elevation: 10,
+  instruction: { 
+    fontSize: 28,
+    fontWeight: '300',
+    marginBottom: 30,
+    letterSpacing: 1.2,
   },
   counter: {
-    fontSize: 48,
-    fontWeight: "bold",
-    color: "white",
-    marginBottom: 10,
+    fontSize: 84,
+    fontWeight: '100',
+    marginBottom: 70,
+    letterSpacing: 2,
   },
-  phaseText: {
-    fontSize: 18,
-    color: "white",
-    fontWeight: "600",
+  circleContainer: {
+    position: 'absolute',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  controls: {
-    paddingBottom: 40,
-    alignItems: "center",
-    gap: 15,
+  backgroundCircle: {
+    position: 'absolute',
+    width: 320,
+    height: 320,
+    borderRadius: 160,
+    backgroundColor: '#667eea',
   },
-  controlButton: {
-    paddingHorizontal: 40,
-    paddingVertical: 15,
-    borderRadius: 25,
-    minWidth: 150,
-    alignItems: "center",
+  circle: {
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowOffset: { width: 0, height: 15 },
+    shadowOpacity: 0.4,
+    shadowRadius: 25,
+    elevation: 15,
+    overflow: 'hidden',
   },
-  controlButtonText: {
-    color: "white",
-    fontSize: 18,
-    fontWeight: "600",
+  circleInnerGlow: {
+    position: 'absolute',
+    width: '80%',
+    height: '80%',
+    borderRadius: 110,
+    backgroundColor: 'white',
   },
-  secondaryButton: {
+  circleText: {
+    color: 'white',
+    fontSize: 22,
+    fontWeight: '500',
+    letterSpacing: 1,
+    textShadowColor: 'rgba(0, 0, 0, 0.2)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  footer: {
+    alignItems: 'center',
+    paddingBottom: 50,
     paddingHorizontal: 30,
-    paddingVertical: 10,
-    borderRadius: 20,
-    backgroundColor: "#e0e0e0",
   },
-  secondaryButtonText: {
-    color: "#666",
-    fontSize: 16,
-    fontWeight: "500",
+  technique: {
+    fontSize: 20,
+    fontWeight: '400',
+    color: '#2d3748',
+    marginBottom: 8,
+    letterSpacing: 0.5,
   },
-  instructions: {
-    paddingBottom: 30,
-  },
-  instructionsTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#2e3b4e",
-    marginBottom: 10,
-  },
-  instruction: {
-    fontSize: 14,
-    color: "#7a869a",
-    marginBottom: 5,
+  description: {
+    fontSize: 15,
+    color: '#718096',
+    fontWeight: '300',
+    letterSpacing: 0.3,
   },
 });

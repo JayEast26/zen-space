@@ -1,7 +1,11 @@
-import { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView, Image } from "react-native";
+import React, { useState } from "react";
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ImageBackground } from "react-native";
 import { Link, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import * as SecureStore from 'expo-secure-store';
+import { createUserWithEmailAndPassword } from "firebase/auth";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { auth, db } from "../../firebaseConfig";
 
 export default function SignUp() {
   const [formData, setFormData] = useState({
@@ -13,7 +17,6 @@ export default function SignUp() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [socialLoading, setSocialLoading] = useState(null);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const router = useRouter();
 
@@ -22,8 +25,13 @@ export default function SignUp() {
   };
 
   const validateForm = () => {
-    if (!formData.name || !formData.email || !formData.password || !formData.confirmPassword) {
+    if (!formData.name?.trim() || !formData.email?.trim() || !formData.password || !formData.confirmPassword) {
       Alert.alert("Error", "Please fill in all fields");
+      return false;
+    }
+
+    if (!formData.email.includes('@') || !formData.email.includes('.')) {
+      Alert.alert("Error", "Please enter a valid email address");
       return false;
     }
 
@@ -51,311 +59,261 @@ export default function SignUp() {
     setIsLoading(true);
     
     try {
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      console.log("Sign up attempted:", formData.email);
+      console.log('👤 Creating Firebase account for:', formData.email);
+      
+      // 1. Create user in Firebase Authentication
+      const userCredential = await createUserWithEmailAndPassword(
+        auth, 
+        formData.email.trim(), 
+        formData.password
+      );
+      
+      const user = userCredential.user;
+      console.log('✅ Firebase user created:', user.uid);
+
+      // 2. Save user data to Firestore
+      const userData = {
+        id: user.uid,
+        name: formData.name.trim(),
+        email: formData.email.trim().toLowerCase(),
+        displayName: formData.name.trim(),
+        createdAt: serverTimestamp(),
+        lastLogin: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      };
+
+      await setDoc(doc(db, "users", user.uid), userData);
+      console.log('✅ User data saved to Firestore');
+
+      // 3. Save user data to SecureStore for local access
+      const userDataForStorage = {
+        uid: user.uid,
+        email: user.email,
+        name: formData.name.trim(),
+        displayName: formData.name.trim(),
+        lastLogin: new Date().toISOString()
+      };
+
+      await SecureStore.setItemAsync('userData', JSON.stringify(userDataForStorage));
+      console.log('✅ User data saved to SecureStore');
+
+      // 4. Navigate to main app - FIXED: Direct navigation instead of alert
+      console.log('🔄 Navigating to zen page...');
       router.push("/zen");
+      
     } catch (error) {
-      Alert.alert("Error", "Failed to create account. Please try again.");
+      console.error('❌ Firebase sign-up error:', error);
+      let errorMessage = "Failed to create account. Please try again.";
+      
+      if (error.code === 'auth/email-already-in-use') {
+        errorMessage = "This email is already registered. Please sign in instead.";
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = "Please enter a valid email address.";
+      } else if (error.code === 'auth/weak-password') {
+        errorMessage = "Password is too weak. Please choose a stronger password.";
+      } else if (error.code === 'auth/network-request-failed') {
+        errorMessage = "Network error. Please check your internet connection.";
+      } else if (error.code === 'auth/operation-not-allowed') {
+        errorMessage = "Email/password accounts are not enabled. Please contact support.";
+      }
+      
+      Alert.alert("Sign Up Error", errorMessage);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleSocialLogin = async (provider) => {
-    setSocialLoading(provider);
-    
-    try {
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      console.log(`${provider} sign up attempted`);
-      Alert.alert(
-        "Welcome!",
-        `You've signed up with ${provider}`,
-        [{ text: "Continue", onPress: () => router.push("/zen") }]
-      );
-    } catch (error) {
-      Alert.alert("Error", `Failed to sign up with ${provider}. Please try again.`);
-    } finally {
-      setSocialLoading(null);
-    }
-  };
-
-  const passwordStrength = () => {
-    if (formData.password.length === 0) return { strength: 0, label: "" };
-    if (formData.password.length < 6) return { strength: 1, label: "Weak", color: "#ff6b6b" };
-    if (formData.password.length < 8) return { strength: 2, label: "Fair", color: "#ffd93d" };
-    return { strength: 3, label: "Strong", color: "#8da676" };
-  };
-
-  const strength = passwordStrength();
-
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      <View style={styles.header}>
-        <Text style={styles.title}>🌱 Begin Your Journey</Text>
-        <Text style={styles.subtitle}>Create your peaceful space</Text>
-      </View>
-      
-      <View style={styles.form}>
-        <View style={styles.inputContainer}>
-          <Ionicons name="person-outline" size={20} color="#8da676" style={styles.inputIcon} />
-          <TextInput
-            value={formData.name}
-            onChangeText={(value) => updateFormData("name", value)}
-            placeholder="Full name"
-            placeholderTextColor="#a0a0a0"
-            style={styles.input}
-            autoComplete="name"
-          />
-        </View>
-        
-        <View style={styles.inputContainer}>
-          <Ionicons name="mail-outline" size={20} color="#8da676" style={styles.inputIcon} />
-          <TextInput
-            value={formData.email}
-            onChangeText={(value) => updateFormData("email", value)}
-            placeholder="Email address"
-            placeholderTextColor="#a0a0a0"
-            style={styles.input}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoComplete="email"
-          />
-        </View>
-        
-        <View style={styles.inputContainer}>
-          <Ionicons name="lock-closed-outline" size={20} color="#8da676" style={styles.inputIcon} />
-          <TextInput
-            value={formData.password}
-            onChangeText={(value) => updateFormData("password", value)}
-            placeholder="Create password"
-            placeholderTextColor="#a0a0a0"
-            style={styles.input}
-            secureTextEntry={!showPassword}
-            autoComplete="password-new"
-          />
-          <TouchableOpacity 
-            onPress={() => setShowPassword(!showPassword)}
-            style={styles.eyeIcon}
-          >
-            <Ionicons 
-              name={showPassword ? "eye-off-outline" : "eye-outline"} 
-              size={20} 
-              color="#7a869a" 
-            />
-          </TouchableOpacity>
-        </View>
-        
-        {formData.password.length > 0 && (
-          <View style={styles.passwordStrength}>
-            <View style={styles.strengthBar}>
-              <View style={[
-                styles.strengthFill, 
-                { 
-                  width: `${(strength.strength / 3) * 100}%`,
-                  backgroundColor: strength.color
-                }
-              ]} />
-            </View>
-            <Text style={[styles.strengthText, { color: strength.color }]}>
-              {strength.label}
-            </Text>
+    <ImageBackground 
+      source={{ uri: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?ixlib=rb-4.0.3&auto=format&fit=crop&w=2340&q=80" }}
+      style={styles.background}
+      blurRadius={15}
+    >
+      <View style={styles.container}>
+        <View style={styles.content}>
+          <View style={styles.header}>
+            <Text style={styles.title}>Begin Your Journey</Text>
+            <Text style={styles.subtitle}>Create your peaceful space</Text>
           </View>
-        )}
-        
-        <View style={styles.inputContainer}>
-          <Ionicons name="lock-closed-outline" size={20} color="#8da676" style={styles.inputIcon} />
-          <TextInput
-            value={formData.confirmPassword}
-            onChangeText={(value) => updateFormData("confirmPassword", value)}
-            placeholder="Confirm password"
-            placeholderTextColor="#a0a0a0"
-            style={styles.input}
-            secureTextEntry={!showConfirmPassword}
-            autoComplete="password-new"
-          />
-          <TouchableOpacity 
-            onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-            style={styles.eyeIcon}
-          >
-            <Ionicons 
-              name={showConfirmPassword ? "eye-off-outline" : "eye-outline"} 
-              size={20} 
-              color="#7a869a" 
-            />
-          </TouchableOpacity>
-        </View>
-        
-        <View style={styles.termsContainer}>
-          <TouchableOpacity 
-            style={styles.checkbox}
-            onPress={() => setAcceptedTerms(!acceptedTerms)}
-          >
-            <Ionicons 
-              name={acceptedTerms ? "checkbox" : "square-outline"} 
-              size={20} 
-              color={acceptedTerms ? "#8da676" : "#7a869a"} 
-            />
-          </TouchableOpacity>
-          <Text style={styles.termsText}>
-            I agree to the{" "}
-            <Text style={styles.termsLink}>Terms of Service</Text> and{" "}
-            <Text style={styles.termsLink}>Privacy Policy</Text>
-          </Text>
-        </View>
-        
-        <TouchableOpacity 
-          onPress={handleSignUp} 
-          style={[styles.primaryButton, isLoading && styles.buttonDisabled]}
-          disabled={isLoading}
-        >
-          {isLoading ? (
-            <View style={styles.loadingContainer}>
-              <Ionicons name="refresh" size={20} color="white" />
-              <Text style={styles.buttonText}>Creating Account...</Text>
+          
+          <View style={styles.form}>
+            <View style={styles.inputContainer}>
+              <TextInput
+                value={formData.name}
+                onChangeText={(value) => updateFormData("name", value)}
+                placeholder="Full name"
+                placeholderTextColor="rgba(255,255,255,0.6)"
+                style={styles.input}
+                autoComplete="name"
+                autoCapitalize="words"
+              />
             </View>
-          ) : (
-            <Text style={styles.buttonText}>Create Account</Text>
-          )}
-        </TouchableOpacity>
+            
+            <View style={styles.inputContainer}>
+              <TextInput
+                value={formData.email}
+                onChangeText={(value) => updateFormData("email", value)}
+                placeholder="Email address"
+                placeholderTextColor="rgba(255,255,255,0.6)"
+                style={styles.input}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoComplete="email"
+              />
+            </View>
+            
+            <View style={styles.inputContainer}>
+              <TextInput
+                value={formData.password}
+                onChangeText={(value) => updateFormData("password", value)}
+                placeholder="Create password"
+                placeholderTextColor="rgba(255,255,255,0.6)"
+                style={styles.input}
+                secureTextEntry={!showPassword}
+                autoComplete="password"
+              />
+              <TouchableOpacity 
+                onPress={() => setShowPassword(!showPassword)}
+                style={styles.eyeIcon}
+              >
+                <Ionicons 
+                  name={showPassword ? "eye-off-outline" : "eye-outline"} 
+                  size={18} 
+                  color="rgba(255,255,255,0.7)" 
+                />
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.inputContainer}>
+              <TextInput
+                value={formData.confirmPassword}
+                onChangeText={(value) => updateFormData("confirmPassword", value)}
+                placeholder="Confirm password"
+                placeholderTextColor="rgba(255,255,255,0.6)"
+                style={styles.input}
+                secureTextEntry={!showConfirmPassword}
+                autoComplete="password"
+              />
+              <TouchableOpacity 
+                onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                style={styles.eyeIcon}
+              >
+                <Ionicons 
+                  name={showConfirmPassword ? "eye-off-outline" : "eye-outline"} 
+                  size={18} 
+                  color="rgba(255,255,255,0.7)" 
+                />
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.termsContainer}>
+              <TouchableOpacity 
+                style={styles.checkbox}
+                onPress={() => setAcceptedTerms(!acceptedTerms)}
+              >
+                <Ionicons 
+                  name={acceptedTerms ? "checkbox" : "square-outline"} 
+                  size={20} 
+                  color={acceptedTerms ? "rgba(141, 166, 118, 0.9)" : "rgba(255,255,255,0.7)"} 
+                />
+              </TouchableOpacity>
+              <Text style={styles.termsText}>
+                I agree to the Terms of Service and Privacy Policy
+              </Text>
+            </View>
+            
+            <View style={styles.divider}>
+              <View style={styles.dividerLine} />
+            </View>
+            
+            <TouchableOpacity 
+              onPress={handleSignUp} 
+              style={[styles.primaryButton, isLoading && styles.buttonDisabled]}
+              disabled={isLoading}
+            >
+              <Text style={styles.buttonText}>
+                {isLoading ? "Creating Account..." : "Create Account"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+          
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>Already have an account? </Text>
+            <Link href="/auth/signin" asChild>
+              <TouchableOpacity>
+                <Text style={styles.footerLink}>Sign In</Text>
+              </TouchableOpacity>
+            </Link>
+          </View>
+        </View>
       </View>
-      
-      <View style={styles.divider}>
-        <View style={styles.dividerLine} />
-        <Text style={styles.dividerText}>or sign up with</Text>
-        <View style={styles.dividerLine} />
-      </View>
-      
-      <View style={styles.socialContainer}>
-        <TouchableOpacity 
-          style={[styles.socialButton, styles.googleButton, socialLoading === 'google' && styles.buttonDisabled]}
-          onPress={() => handleSocialLogin("Google")}
-          disabled={socialLoading}
-        >
-          {socialLoading === 'google' ? (
-            <Ionicons name="refresh" size={20} color="#DB4437" />
-          ) : (
-            <Image 
-              source={{ uri: "https://upload.wikimedia.org/wikipedia/commons/thumb/5/53/Google_%22G%22_Logo.svg/512px-Google_%22G%22_Logo.svg.png" }}
-              style={styles.socialIcon}
-            />
-          )}
-          <Text style={[styles.socialButtonText, styles.googleText]}>
-            {socialLoading === 'google' ? 'Signing Up...' : 'Google'}
-          </Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={[styles.socialButton, styles.facebookButton, socialLoading === 'facebook' && styles.buttonDisabled]}
-          onPress={() => handleSocialLogin("Facebook")}
-          disabled={socialLoading}
-        >
-          {socialLoading === 'facebook' ? (
-            <Ionicons name="refresh" size={20} color="#1877F2" />
-          ) : (
-            <Ionicons name="logo-facebook" size={20} color="#1877F2" />
-          )}
-          <Text style={[styles.socialButtonText, styles.facebookText]}>
-            {socialLoading === 'facebook' ? 'Signing Up...' : 'Facebook'}
-          </Text>
-        </TouchableOpacity>
-      </View>
-      
-      <View style={styles.footer}>
-        <Text style={styles.footerText}>Already have an account? </Text>
-        <Link href="/auth/signin" asChild>
-          <TouchableOpacity>
-            <Text style={styles.footerLink}>Sign In</Text>
-          </TouchableOpacity>
-        </Link>
-      </View>
-      
-      <Link href="/zen" asChild>
-        <TouchableOpacity style={styles.guestButton}>
-          <Text style={styles.guestButtonText}>Continue as Guest →</Text>
-        </TouchableOpacity>
-      </Link>
-    </ScrollView>
+    </ImageBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    padding: 30, 
-    backgroundColor: "#f8faf9"
+  background: {
+    flex: 1,
+  },
+  container: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  content: { 
+    width: "100%",
+    maxWidth: 320,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    borderRadius: 16,
+    padding: 25,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.15)",
   },
   header: {
     alignItems: "center",
-    marginTop: 40,
-    marginBottom: 40
+    marginBottom: 25,
+    width: "100%",
   },
   title: { 
-    fontSize: 32, 
+    fontSize: 26, 
     fontWeight: "bold", 
-    marginBottom: 8, 
-    color: "#2e3b4e"
+    color: "white",
+    marginBottom: 8,
   },
   subtitle: {
-    fontSize: 16,
-    color: "#7a869a",
-    textAlign: "center"
+    fontSize: 15,
+    color: "rgba(255, 255, 255, 0.8)",
+    textAlign: "center",
   },
   form: {
-    marginBottom: 30
+    width: "100%",
+    gap: 12,
+    marginBottom: 15,
   },
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#e0e0e0",
-    borderRadius: 12,
-    padding: 16,
-    backgroundColor: "white",
-    marginBottom: 15,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2
-  },
-  inputIcon: {
-    marginRight: 10
+    borderColor: "rgba(255, 255, 255, 0.3)",
+    borderRadius: 10,
+    padding: 14,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
   },
   input: {
     flex: 1,
-    fontSize: 16,
-    color: "#2e3b4e"
+    fontSize: 15,
+    color: "white",
   },
   eyeIcon: {
-    padding: 5
-  },
-  passwordStrength: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 15,
-    gap: 10
-  },
-  strengthBar: {
-    flex: 1,
-    height: 4,
-    backgroundColor: "#e0e0e0",
-    borderRadius: 2,
-    overflow: "hidden"
-  },
-  strengthFill: {
-    height: "100%",
-    borderRadius: 2
-  },
-  strengthText: {
-    fontSize: 12,
-    fontWeight: "500",
-    minWidth: 40
+    padding: 4
   },
   termsContainer: {
     flexDirection: "row",
     alignItems: "flex-start",
-    marginBottom: 25,
-    gap: 10
+    marginTop: 10,
+    gap: 10,
   },
   checkbox: {
     paddingTop: 2
@@ -363,108 +321,44 @@ const styles = StyleSheet.create({
   termsText: {
     flex: 1,
     fontSize: 12,
-    color: "#7a869a",
+    color: "rgba(255, 255, 255, 0.8)",
     lineHeight: 16
   },
-  termsLink: {
-    color: "#8da676"
+  divider: {
+    width: "100%",
+    marginVertical: 10,
+  },
+  dividerLine: {
+    height: 1,
+    backgroundColor: "rgba(255, 255, 255, 0.3)",
   },
   primaryButton: {
-    backgroundColor: "#8da676",
-    padding: 18,
-    borderRadius: 12,
+    backgroundColor: "rgba(141, 166, 118, 0.85)",
+    padding: 14,
+    borderRadius: 10,
     alignItems: "center",
-    shadowColor: "#8da676",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4
-  },
-  loadingContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10
+    marginTop: 5
   },
   buttonDisabled: {
     opacity: 0.7
   },
   buttonText: {
     color: "white",
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "600"
-  },
-  divider: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginVertical: 20
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: "#e0e0e0"
-  },
-  dividerText: {
-    marginHorizontal: 15,
-    color: "#7a869a",
-    fontSize: 14
-  },
-  socialContainer: {
-    gap: 12,
-    marginBottom: 30
-  },
-  socialButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 15,
-    borderRadius: 12,
-    borderWidth: 1,
-    gap: 12
-  },
-  googleButton: {
-    backgroundColor: "white",
-    borderColor: "#e0e0e0"
-  },
-  facebookButton: {
-    backgroundColor: "white",
-    borderColor: "#e0e0e0"
-  },
-  socialIcon: {
-    width: 20,
-    height: 20
-  },
-  socialButtonText: {
-    fontSize: 16,
-    fontWeight: "600"
-  },
-  googleText: {
-    color: "#5f6368"
-  },
-  facebookText: {
-    color: "#1877F2"
   },
   footer: {
     flexDirection: "row",
     justifyContent: "center",
-    marginBottom: 30
+    marginTop: 15
   },
   footerText: {
-    color: "#7a869a",
+    color: "rgba(255, 255, 255, 0.8)",
     fontSize: 14
   },
   footerLink: {
-    color: "#8da676",
+    color: "rgba(141, 166, 118, 0.9)",
     fontSize: 14,
     fontWeight: "600"
   },
-  guestButton: {
-    padding: 16,
-    alignItems: "center",
-    marginBottom: 30
-  },
-  guestButtonText: {
-    color: "#8da676",
-    fontSize: 14,
-    fontWeight: "600"
-  }
 });
